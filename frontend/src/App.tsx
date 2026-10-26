@@ -5,6 +5,7 @@ import RouteList from "./components/RouteList";
 import TimeControl from "./components/TimeControl";
 import TripForm, { type TripFormValues } from "./components/TripForm";
 import { nextWholeHour, toLocalInput } from "./lib/format";
+import { prefetchWeather } from "./lib/prefetch";
 import { truckAt } from "./lib/truck";
 import MapView from "./map/MapView";
 import type { HeatMetric, Heatmap, Plan } from "./types";
@@ -42,6 +43,7 @@ export default function App() {
   const planCtrl = useRef<AbortController | null>(null);
   const heatCtrl = useRef<AbortController | null>(null);
   const heatKey = useRef("");
+  const prefetchedKey = useRef("");
 
   const loadHeatmap = useCallback((p: Plan) => {
     // The corridor grid doesn't depend on checkpoint spacing, so keep it if only that changed.
@@ -78,16 +80,30 @@ export default function App() {
       planCtrl.current = ctrl;
       setPlanning(true);
       setError(null);
-      planTrip(
-        {
-          origin: v.origin,
-          destination: v.destination,
-          departure: departure.toISOString(),
-          load_weight_lb: Number(v.loadLb),
-          interval_miles: v.interval,
-        },
-        ctrl.signal,
-      )
+      const trip = { origin: v.origin, destination: v.destination, departure: departure.toISOString() };
+
+      // One prefetch covers every checkpoint spacing and the heatmap, so skip it
+      // when only the spacing or load changed.
+      const tripKey = JSON.stringify(trip);
+      const prefetch =
+        tripKey === prefetchedKey.current
+          ? Promise.resolve({ origin: v.origin, destination: v.destination })
+          : prefetchWeather(trip, ctrl.signal)
+              .then((places) => {
+                prefetchedKey.current = JSON.stringify({ ...trip, ...places });
+                return places;
+              })
+              .catch((err) => {
+                if (err.name === "AbortError") throw err;
+                // Not fatal: the server fetches any forecasts it is still missing.
+                console.warn("Browser weather prefetch failed; falling back to the server.", err);
+                return { origin: v.origin, destination: v.destination };
+              });
+
+      prefetch
+        .then((places) =>
+          planTrip({ ...trip, ...places, load_weight_lb: Number(v.loadLb), interval_miles: v.interval }, ctrl.signal),
+        )
         .then((p) => {
           setPlan(p);
           setSelectedId(p.recommended_route_id);

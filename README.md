@@ -1,5 +1,8 @@
 # Weather-Aware Truck Routing
 
+**Live app:** https://weather-aware-truck-routing-wbhr.onrender.com (free instance; the first visit after
+it's been idle takes up to a minute to wake).
+
 A React + Django app that helps a truck driver pick the safest route for a trip, based on the
 forecast weather along each route at the time the truck will actually be there, the load
 weight, and travel time.
@@ -79,6 +82,8 @@ origin/destination ──► Photon geocoder
 | `GET /api/geocode?q=` | Place autocomplete |
 | `POST /api/plan` | `{origin, destination, departure, load_weight_lb, interval_miles}` → routes, checkpoints, risk, recommendation |
 | `POST /api/heatmap` | `{corridor, departure, load_weight_lb}` → corridor grid with 49 hourly frames (risk, wind, rain, snow) |
+| `POST /api/weather/needs` | `{origin, destination, departure}` → the forecast lattice points and date window a trip needs |
+| `POST /api/weather` | `{points, hourly}` → stores browser-fetched Open-Meteo forecasts in the server cache |
 | `GET /api/health` | Health check |
 
 `/api/plan` returns the thinned route lines (`corridor`), which the client posts to `/api/heatmap`.
@@ -134,6 +139,15 @@ Route A."* If every route has Severe or No Travel weather, it suggests a later d
   the heatmap cells share forecasts. Each checkpoint still uses its own ETA hour. Forecasts are cached
   per lattice point for a fixed window starting today. Set `WEATHER_GRID_DEG=0` (and ideally
   `OPEN_METEO_API_KEY`) to sample exact points.
+- **Forecasts fetched in the browser:** free cloud hosts share outbound IPs with many other apps, and on
+  Render the server's own Open-Meteo requests were rate-limited before it had made any. So the frontend
+  asks `/api/weather/needs` which forecast points the trip uses, covering every spacing and the heatmap.
+  It fetches those from Open-Meteo using the viewer's own quota and posts them to `/api/weather`, which
+  validates them and adds them to the server cache. Planning and risk scoring then run on the server as
+  usual. Anything still missing is fetched by the server, so the API also works on its own (e.g. with
+  curl). The trade-off is that this shared cache trusts uploaded forecasts. That's fine for a demo, but a
+  production deployment would use a paid Open-Meteo key (`OPEN_METEO_API_KEY`) and set
+  `WEATHER_ACCEPT_CLIENT_FORECASTS=false`.
 - **Forecast range:** departures are limited to the next 7 days.
 - **Times** are shown in the browser's time zone.
 
@@ -162,7 +176,7 @@ Gunicorn runs one worker with 8 threads, so all requests share the in-memory cac
 
 Environment variables (all optional): `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`,
 `OSRM_URL`, `GEOCODER_URL`, `OPEN_METEO_URL`, `OPEN_METEO_API_KEY`, `WEATHER_GRID_DEG`,
-`WEATHER_CACHE_SECONDS`.
+`WEATHER_CACHE_SECONDS`, `WEATHER_ACCEPT_CLIENT_FORECASTS`.
 
 ## Data sources
 

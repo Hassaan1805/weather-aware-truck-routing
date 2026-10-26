@@ -64,8 +64,13 @@ def _grid(corridor: list[list[tuple[float, float]]]) -> tuple[list[tuple[float, 
     return cells, spacing_lat, spacing_lon
 
 
+def corridor_grid(corridor: list[list[tuple[float, float]]]) -> tuple[list[tuple[float, float]], float, float]:
+    """Heatmap cells for a corridor, plus the cell size in degrees (lat, lon)."""
+    return _grid([geo.simplify(line, 120) for line in corridor])
+
+
 def corridor_heatmap(corridor: list[list[tuple[float, float]]], departure: datetime, load_lb: float) -> dict:
-    cells, spacing_lat, spacing_lon = _grid([geo.simplify(line, 120) for line in corridor])
+    cells, spacing_lat, spacing_lon = corridor_grid(corridor)
     start = forecast_start(departure)
     frames = HEATMAP_HOURS + 1
     forecasts = weather.fetch_hourly(cells, start, frames)

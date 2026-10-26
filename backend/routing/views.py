@@ -1,13 +1,20 @@
 import logging
 
+from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import planner
 from .heatmap import corridor_heatmap
-from .serializers import HeatmapRequestSerializer, PlanRequestSerializer
-from .services import UpstreamError, geocoding
+from .prefetch import weather_needs
+from .serializers import (
+    HeatmapRequestSerializer,
+    PlanRequestSerializer,
+    WeatherNeedsRequestSerializer,
+    WeatherUploadSerializer,
+)
+from .services import UpstreamError, geocoding, weather
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +46,8 @@ class PlanView(APIView):
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
         try:
-            origin = self._place(data["origin"])
-            destination = self._place(data["destination"])
+            origin = resolve_place(data["origin"])
+            destination = resolve_place(data["destination"])
             plan = planner.plan_trip(
                 origin,
                 destination,
@@ -55,11 +62,42 @@ class PlanView(APIView):
             return _error(str(exc), status.HTTP_502_BAD_GATEWAY)
         return Response(plan)
 
-    @staticmethod
-    def _place(place: dict) -> dict:
-        if "lat" in place:
-            return {"label": place["label"], "lat": place["lat"], "lon": place["lon"]}
-        return geocoding.resolve(place["label"])
+
+def resolve_place(place: dict) -> dict:
+    if "lat" in place:
+        return {"label": place["label"], "lat": place["lat"], "lon": place["lon"]}
+    return geocoding.resolve(place["label"])
+
+
+class WeatherNeedsView(APIView):
+    """Forecast points a trip needs, for the browser to fetch from Open-Meteo itself."""
+
+    def post(self, request):
+        ser = WeatherNeedsRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        try:
+            needs = weather_needs(
+                resolve_place(data["origin"]), resolve_place(data["destination"]), data["departure"]
+            )
+        except (geocoding.PlaceNotFound, planner.NoRouteError) as exc:
+            return _error(str(exc), status.HTTP_422_UNPROCESSABLE_ENTITY)
+        except UpstreamError as exc:
+            logger.warning("weather needs failed: %s", exc)
+            return _error(str(exc), status.HTTP_502_BAD_GATEWAY)
+        return Response(needs)
+
+
+class WeatherUploadView(APIView):
+    """Accept browser-fetched Open-Meteo forecasts into the server's forecast cache."""
+
+    def post(self, request):
+        if not settings.WEATHER_ACCEPT_CLIENT_FORECASTS:
+            return _error("Forecast uploads are disabled on this server.", status.HTTP_403_FORBIDDEN)
+        ser = WeatherUploadSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        stored = weather.store_client_forecasts(ser.validated_data["points"], ser.validated_data["hourly"])
+        return Response({"stored": stored})
 
 
 class HeatmapView(APIView):

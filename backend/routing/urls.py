@@ -7,4 +7,6 @@ urlpatterns = [
     path("geocode", views.GeocodeView.as_view()),
     path("plan", views.PlanView.as_view()),
     path("heatmap", views.HeatmapView.as_view()),
+    path("weather/needs", views.WeatherNeedsView.as_view()),
+    path("weather", views.WeatherUploadView.as_view()),
 ]

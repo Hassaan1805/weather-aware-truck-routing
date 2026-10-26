@@ -45,6 +45,9 @@ CACHES = {
     }
 }
 
+# Browser-fetched forecast batches (100 points x up to 12 days) can exceed Django's 2.5 MB default.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
+
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
@@ -80,3 +83,5 @@ WEATHER_CACHE_SECONDS = int(os.environ.get("WEATHER_CACHE_SECONDS", "1800"))
 # Weather lookups snap to this lattice (degrees). 0 = exact points, which costs
 # far more API calls; only sensible with a paid Open-Meteo key.
 WEATHER_GRID_DEG = float(os.environ.get("WEATHER_GRID_DEG", "0.25"))
+# Let browsers upload forecasts they fetched from Open-Meteo (see routing/prefetch.py).
+WEATHER_ACCEPT_CLIENT_FORECASTS = env_bool("WEATHER_ACCEPT_CLIENT_FORECASTS", True)

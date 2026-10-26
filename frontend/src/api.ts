@@ -39,6 +39,26 @@ export function planTrip(trip: TripRequest, signal: AbortSignal): Promise<Plan> 
   return request("/api/plan", { method: "POST", body: JSON.stringify(trip), signal });
 }
 
+export interface WeatherNeeds {
+  origin: Required<Place>;
+  destination: Required<Place>;
+  start_date: string;
+  end_date: string;
+  open_meteo_params: Record<string, string>;
+  points: LatLon[];
+}
+
+export function weatherNeeds(
+  trip: Pick<TripRequest, "origin" | "destination" | "departure">,
+  signal: AbortSignal,
+): Promise<WeatherNeeds> {
+  return request("/api/weather/needs", { method: "POST", body: JSON.stringify(trip), signal });
+}
+
+export function uploadWeather(points: LatLon[], hourly: unknown[], signal: AbortSignal): Promise<{ stored: number }> {
+  return request("/api/weather", { method: "POST", body: JSON.stringify({ points, hourly }), signal });
+}
+
 export function fetchHeatmap(
   corridor: LatLon[][],
   departure: string,

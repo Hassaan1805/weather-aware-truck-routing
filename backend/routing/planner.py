@@ -128,13 +128,25 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def build_tracks(raw_routes: list[osrm.RawRoute]) -> list[geo.Track]:
+    return [geo.build_track(r.coords, r.segment_seconds, r.duration_s) for r in raw_routes]
+
+
+def corridor_lines(tracks: list[geo.Track]) -> list[list[tuple[float, float]]]:
+    """Thinned route lines the client sends back to fetch the corridor heatmap."""
+    return [
+        geo.simplify([(round(lat, 5), round(lon, 5)) for lat, lon in geo.thin_track(t).coords], 300)
+        for t in tracks
+    ]
+
+
 def plan_trip(
     origin: dict, destination: dict, departure: datetime, load_lb: float, interval_mi: int
 ) -> dict:
     o = (origin["lat"], origin["lon"])
     d = (destination["lat"], destination["lon"])
     raw_routes = find_routes(o, d)
-    tracks = [geo.build_track(r.coords, r.segment_seconds, r.duration_s) for r in raw_routes]
+    tracks = build_tracks(raw_routes)
     samples = [geo.sample_checkpoints(t, interval_mi) for t in tracks]
 
     start = forecast_start(departure)
@@ -230,6 +242,5 @@ def plan_trip(
         "recommendation": explanation,
         "warnings": warnings,
         "routes": routes,
-        # Thinned route lines the client sends back to fetch the corridor heatmap.
-        "corridor": [geo.simplify([tuple(p) for p in r["geometry"]], 300) for r in routes],
+        "corridor": corridor_lines(tracks),
     }
