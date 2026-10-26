@@ -19,4 +19,5 @@ COPY backend/ ./
 COPY --from=web /app/frontend/dist /app/frontend/dist
 EXPOSE 8000
 # One worker with threads so every request shares the in-memory forecast cache.
-CMD gunicorn config.wsgi --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 90
+# `exec` makes gunicorn PID 1 so it receives the platform's stop signal.
+CMD ["sh", "-c", "exec gunicorn config.wsgi --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 90"]
